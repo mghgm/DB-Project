@@ -80,6 +80,37 @@ async def charge_ack_endpoint(charge_ack_request: ChargeAckRequest):
 
     return {"status": "verified"}
 
+@app.get("/history", response_model=TransactionHistoryResponse)
+async def get_transaction_history(
+    userId: int = Query(..., description="The user ID"),
+    page: int = Query(1, description="The page number"),
+    limit: int = Query(10, description="The number of items per page"),
+    pool: asyncpg.Pool = Depends(get_pool)
+):
+    offset = (page - 1) * limit
+    async with pool.acquire() as connection:
+        try:
+            query = """
+                SELECT amount
+                FROM transactions
+                WHERE user_id = $1
+                ORDER BY time DESC
+                LIMIT $2 OFFSET $3
+            """
+            rows = await connection.fetch(query, userId, limit, offset)
+            transactions = [
+                Transaction(
+                    time=row["time"].isoformat(),
+                    amount=row["amount"],
+                    cause=row["cause"]
+                )
+                for row in rows
+            ]
+            return {"transactions": transactions}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error fetching transaction history: {str(e)}")
+
+
 
 
 if __name__ == "__main__":
